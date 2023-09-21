@@ -1,7 +1,6 @@
-<center>
-<br>
-<img src="assets/yxxyx.png" alt=""/>
-</center>
+<div align="center">
+    <img src="assets/yxxyx.png" alt="example">
+</div>
 <p align="center" style="font-size: 21px">X1a0He</p>
 <p align="center">2023@MacBook Pro</p>
 
