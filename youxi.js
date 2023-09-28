@@ -10,7 +10,7 @@ let xh_config = {
         feed: process.env.YOUXI_PET_FEED === 'true' || true,
         foodID: process.env.YOUXI_PET_FOOD_ID || 3
     },
-    authorization: process.env.YOUXI_AUTHORIZATION && process.env.YOUXI_AUTHORIZATION.split("@") || ["Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzM4NCJ9.eyJleHAiOjE3MDMwMzM2NzgsInVzZXJJZCI6IjE0NTYxNjUiLCJpYXQiOjE2OTUyNTc2NzgsInBsYXRmb3JtIjoid2VjaGF0In0.yZypOv6ehpyTrlCwVxyEZErwLbrNJ9ogtHKhsLq8DcoDMbeo1ZgiWJ4mnhksOoDN"],
+    authorization: process.env.YOUXI_AUTHORIZATION && process.env.YOUXI_AUTHORIZATION.split("@") || [""],
     headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.101.76 Safari/537.36",
         "Referer": "https://wechat.ulife.group/"
@@ -31,7 +31,7 @@ let barkMessage = "", pet = {
 };
 let isLogin = false, userGoldValue = 0, userVioletGoldValue = 0, userCharm = 0, couponCount = 0, noDirty = 0;
 let todaySign = false, isCanAirClothes = false, isCanCollectOthers = true, isShelfFull = false, isCanHelpAir = true,
-    canFeed = false, petGuideComplete = false, isGreaterThanPreserve = false;
+    canFeed = false, petGuideComplete = false, isGreaterThanPreserve = false, runLogout = false;
 let clothesUnlocks = new Map(), propGiveRecord = new Map(), players = new Map(), tasks = new Map(), coupons = new Map(),
     follows = new Map;
 let collectIds = [];
@@ -49,6 +49,10 @@ let collectIds = [];
             $.dirtyClothesCount = 0;
             $.authorization = authorization;
             await userInfo();   // 获取个人信息
+            // if (runLogout) {
+            //     await logout();
+            //     return;
+            // }
             if (!isLogin) { // 登录状态失效
                 barkMessage += `authorization ${index + 1} 已失效...\n`;
                 console.log(`[${$.getTime()}] authorization ${index + 1} 已失效...`);
@@ -996,6 +1000,29 @@ function follow(userName, userId) {
                     let { code, message, success } = JSON.parse(result);
                     if (code === 1 || message === "success" || success === true) {
                         console.log(`[${$.getTime()}][${$.username}] 取消关注用户 ${userName}[${userId}] 成功`);
+                    } else {
+                        barkMessage += `[${$.username}] 本次操作失败: ${message}, ${arguments.callee.name}\n`;
+                        console.log(arguments.callee.name, `[${$.getTime()}][${$.username}] 本次操作失败: ${message}`);
+                        console.log(arguments.callee.name, result);
+                    }
+                }
+            } catch (e) {
+                console.log(e);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+function logout() {
+    return new Promise((resolve) => {
+        $.request("post", taskURL("/auth/logout", `{}`, "POST"), (err, resp, result) => {
+            try {
+                if (safeGet(result)) {
+                    let { code, message, success } = JSON.parse(result);
+                    if (code === 1 || message === "success" || success === true) {
+                        console.log(`[${$.getTime()}][${$.username}] 退出登录成功`);
                     } else {
                         barkMessage += `[${$.username}] 本次操作失败: ${message}, ${arguments.callee.name}\n`;
                         console.log(arguments.callee.name, `[${$.getTime()}][${$.username}] 本次操作失败: ${message}`);

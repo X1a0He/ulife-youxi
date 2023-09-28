@@ -152,6 +152,10 @@ node youxi
 - [ ] ❌ 榜单板块(无意义，不会支持)
 - [ ] ❌ 动态板块(无意义，不会支持)
 # 更新日志
+- 2023-09-28 08:55 Update [youxi.js](https://github.com/X1a0He/ulife-youxi/blob/main/youxi.js)
+```
+新增退出登录功能，该功能已被注释，有需要的可以解开注释使用，Line 52 - 55
+```
 - 2023-09-27 13:15 Update [youxi.js](https://github.com/X1a0He/ulife-youxi/blob/main/youxi.js)
 ```
 1. 新增查询领券中心可领取的优惠券数量
