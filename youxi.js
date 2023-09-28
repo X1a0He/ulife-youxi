@@ -10,7 +10,7 @@ let xh_config = {
         feed: process.env.YOUXI_PET_FEED === 'true' || true,
         foodID: process.env.YOUXI_PET_FOOD_ID || 3
     },
-    authorization: process.env.YOUXI_AUTHORIZATION && process.env.YOUXI_AUTHORIZATION.split("@") || [],
+    authorization: process.env.YOUXI_AUTHORIZATION && process.env.YOUXI_AUTHORIZATION.split("@") || ["Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzM4NCJ9.eyJleHAiOjE3MDMwMzM2NzgsInVzZXJJZCI6IjE0NTYxNjUiLCJpYXQiOjE2OTUyNTc2NzgsInBsYXRmb3JtIjoid2VjaGF0In0.yZypOv6ehpyTrlCwVxyEZErwLbrNJ9ogtHKhsLq8DcoDMbeo1ZgiWJ4mnhksOoDN"],
     headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.101.76 Safari/537.36",
         "Referer": "https://wechat.ulife.group/"
@@ -32,7 +32,8 @@ let barkMessage = "", pet = {
 let isLogin = false, userGoldValue = 0, userVioletGoldValue = 0, userCharm = 0, couponCount = 0, noDirty = 0;
 let todaySign = false, isCanAirClothes = false, isCanCollectOthers = true, isShelfFull = false, isCanHelpAir = true,
     canFeed = false, petGuideComplete = false, isGreaterThanPreserve = false;
-let clothesUnlocks = new Map(), propGiveRecord = new Map(), players = new Map(), tasks = new Map();
+let clothesUnlocks = new Map(), propGiveRecord = new Map(), players = new Map(), tasks = new Map(), coupons = new Map(),
+    follows = new Map;
 let collectIds = [];
 !(async () => {
     if (!xh_config.authorization) {
@@ -52,7 +53,16 @@ let collectIds = [];
                 barkMessage += `authorization ${index + 1} 已失效...\n`;
                 console.log(`[${$.getTime()}] authorization ${index + 1} 已失效...`);
             } else {    // 登录状态有效
-                await getMarketUserInfo();  // 获取优惠券
+                await getMarketUserInfo();  // 获取优惠券数量
+                await $.wait(500);
+                await couponCenter();   // 查看是否有优惠券可领取
+                await $.wait(500);
+                if (coupons.size !== 0) {
+                    for (let [couponName, couponId] of coupons) {
+                        await receive(couponName, couponId);
+                        await $.wait(500);
+                    }
+                }
                 await $.wait(500);
                 /* 签到部分 */
                 await userGold();
@@ -193,6 +203,15 @@ let collectIds = [];
                     }
                 }
                 /* Task Part End */
+                /* Unfollow Start */
+                await pageFollow(1, 20);
+                if (follows.size !== 0) {
+                    for (let [userName, userId] of follows) {
+                        await follow(userName, userId);
+                        await $.wait(500);
+                    }
+                }
+                /* Unfollow End */
                 await userInfo(true);
             }
         }
@@ -861,6 +880,122 @@ function taskConvertGold(title, id) {
                     } else if (code === 0) {
                         barkMessage += `[${$.username}] 领取失败: ${message}\n`;
                         console.log(`[${$.getTime()}][${$.username}] 领取失败: ${message}`);
+                    } else {
+                        barkMessage += `[${$.username}] 本次操作失败: ${message}, ${arguments.callee.name}\n`;
+                        console.log(arguments.callee.name, `[${$.getTime()}][${$.username}] 本次操作失败: ${message}`);
+                        console.log(arguments.callee.name, result);
+                    }
+                }
+            } catch (e) {
+                console.log(e);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+function couponCenter() {
+    return new Promise((resolve) => {
+        $.request("get", taskURL("/market/receiveAward/couponCenter", '', "GET"), (err, resp, result) => {
+            try {
+                if (safeGet(result)) {
+                    let { code, data, message, success } = JSON.parse(result);
+                    if (code === 1 || message === "success" || success === true) {
+                        if (data instanceof Array) {
+                            if (data.length !== 0) {
+                                coupons.clear();
+                                barkMessage += `[${$.username}] 领券中心有 ${data.length} 张优惠券\n`;
+                                console.log(`[${$.getTime()}][${$.username}] 领券中心有 ${data.length} 张优惠券`);
+                                for (const coupon of data) {
+                                    let { id, couponName, couponType } = coupon;
+                                    // 这个type我也不知道是什么东西，判断就完了，可能是可领取？不知道
+                                    if (couponType === 2) {
+                                        console.log(`[${$.getTime()}][${$.username}] 优惠券: ${couponName} 可领取`);
+                                        coupons.set(couponName, id);
+                                    } else {
+                                        console.log(`[${$.getTime()}][${$.username}] 优惠券状态未知: ${couponName} , id: ${id}, type: ${couponType}`);
+                                    }
+                                }
+                            } else {
+                                console.log(`[${$.getTime()}][${$.username}] 领券中心无优惠券可领取`);
+                            }
+                        } else {
+                            console.log(`[${$.getTime()}][${$.username}] 优惠券未知错误: ${result}`);
+                        }
+                    } else {
+                        console.log(arguments.callee.name, `[${$.getTime()}][${$.username}] 本次操作失败: ${message}`);
+                        console.log(arguments.callee.name, result);
+                    }
+                }
+            } catch (e) {
+                console.log(e);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+function receive(couponName, couponId) { // 领取优惠券
+    console.log(`[${$.getTime()}][${$.username}] 正在领取优惠券: ${couponName} ...`);
+    return new Promise((resolve) => {
+        $.request("post", taskURL("/market/receiveAward/receive", `{"id":${couponId}}`, "POST"), (err, resp, result) => {
+            try {
+                if (safeGet(result)) {
+                    let { code, data, message, success } = JSON.parse(result);
+                    if (code === 1 || message === "success" || success === true) {
+                        barkMessage += `[${$.username}] 优惠券 ${couponName} ${data}\n`;
+                        console.log(`[${$.getTime()}][${$.username}] 优惠券 ${couponName} ${data}`);
+                    } else {
+                        console.log(arguments.callee.name, `[${$.getTime()}][${$.username}] 本次操作失败: ${message}`);
+                        console.log(arguments.callee.name, result);
+                    }
+                }
+            } catch (e) {
+                console.log(e);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+function pageFollow(pageNum, pageSize) {
+    return new Promise((resolve) => {
+        $.request("post", taskURL("/bbs/api/userFans/pageFollow", `{"pageNum":${pageNum}, "pageSize":${pageSize}}`, "POST"), (err, resp, result) => {
+            try {
+                if (safeGet(result)) {
+                    let { code, data, message, success } = JSON.parse(result);
+                    if (code === 1 || message === "success" || success === true) {
+                        let { list, total } = data;
+                        console.log(`[${$.getTime()}][${$.username}] 获取到 ${total} 个已关注的好友`);
+                        follows.clear();
+                        for (let item of list) follows.set(item.username, item.followId);
+                    } else {
+                        barkMessage += `[${$.username}] 本次操作失败: ${message}, ${arguments.callee.name}\n`;
+                        console.log(arguments.callee.name, `[${$.getTime()}][${$.username}] 本次操作失败: ${message}`);
+                        console.log(arguments.callee.name, result);
+                    }
+                }
+            } catch (e) {
+                console.log(e);
+            } finally {
+                resolve();
+            }
+        });
+    });
+}
+
+function follow(userName, userId) {
+    return new Promise((resolve) => {
+        console.log(`[${$.getTime()}][${$.username}] 正在取消关注用户 ${userName}[${userId}] ...`);
+        $.request("post", taskURL("/bbs/api/userFans/follow", `{"id":${userId}}`, "POST"), (err, resp, result) => {
+            try {
+                if (safeGet(result)) {
+                    let { code, message, success } = JSON.parse(result);
+                    if (code === 1 || message === "success" || success === true) {
+                        console.log(`[${$.getTime()}][${$.username}] 取消关注用户 ${userName}[${userId}] 成功`);
                     } else {
                         barkMessage += `[${$.username}] 本次操作失败: ${message}, ${arguments.callee.name}\n`;
                         console.log(arguments.callee.name, `[${$.getTime()}][${$.username}] 本次操作失败: ${message}`);
